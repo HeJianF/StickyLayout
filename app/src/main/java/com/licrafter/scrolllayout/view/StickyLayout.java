@@ -69,9 +69,9 @@ public class StickyLayout extends LinearLayout {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mContentView = (ViewPager) findViewById(R.id.goodsViewPager);
-        mHeaderView = (LinearLayout) findViewById(R.id.header);
-        mStickyView = (TabLayout) findViewById(R.id.tabLayout);
+        mContentView = findViewById(R.id.goodsViewPager);
+        mHeaderView = findViewById(R.id.header);
+        mStickyView = findViewById(R.id.tabLayout);
     }
 
     @Override
@@ -90,6 +90,8 @@ public class StickyLayout extends LinearLayout {
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 //DOWN 事件停止 scroller
+                // TODO: 2019-07-15 1. 滑动没有结束 && 头部没有隐藏 && 列表滑动到了头部
+                // TODO: 2019-07-15 1. 滑动没有结束 && 头部没有隐藏 && 向上滑
                 if (!mScroller.isFinished() && !isSticky() && isRecyclerViewTop(getRecyclerView()) || !mScroller.isFinished() && !isSticky() && mDirection == DIRECTION.UP) {
                     mScroller.forceFinished(true);
                     ev.setAction(MotionEvent.ACTION_CANCEL);
@@ -102,6 +104,7 @@ public class StickyLayout extends LinearLayout {
                 float dy = mLastY - y;
                 //当列表乡下滑动到顶部,发送 ACTION_CANCEL 让 StickyLayout 获取滑动事件
                 //有两种情况,一种是头部处于黏性状态,一种是头部处于非粘性状态
+                // TODO: 2019-07-15 1. 列表下滑 && 内嵌滚动控件是否受用户手势的操控 && 列表滑动到了头部
                 if (dy < 0 && Math.abs(dy) > mTouchSlop && mIsControlled && isRecyclerViewTop(getRecyclerView())) {
                     mLastY = y;
                     mIsControlled = false;
@@ -135,6 +138,9 @@ public class StickyLayout extends LinearLayout {
                 //非粘性状态列表没有滑动到顶部,向上滑||非粘性状态列表滑动到顶部||黏性状态向下滑,列表到达顶部
                 //这3种情况都需要拦截滑动事件
                 float dy = mLastY - y;
+                // TODO: 2019-07-15 1. 头部没有隐藏 && 列表没有滑动到头部 && 向上滑
+                // TODO: 2019-07-15 1. 头部没有隐藏 && 列表滑动到头部
+                // TODO: 2019-07-15 1. 头部隐藏 && 向下滑 && 列表滑动到头部
                 if (!isSticky() && Math.abs(dy) > mTouchSlop && !isRecyclerViewTop(getRecyclerView()) && dy > 0 || !isSticky() && Math.abs(dy) > mTouchSlop && isRecyclerViewTop(getRecyclerView()) || isSticky() && dy < 0 && isRecyclerViewTop(getRecyclerView())) {
                     mLastY = y;
                     return true;
