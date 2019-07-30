@@ -36,8 +36,6 @@ public class StickyLayout extends LinearLayout {
     private boolean mIsControlled;
     //整体布局是否被拖拽
     private boolean mIsDragging;
-    //是否是事件转发
-    private boolean mReDirect;
 
     private Scroller mScroller;
     private int mTouchSlop;
@@ -60,7 +58,6 @@ public class StickyLayout extends LinearLayout {
     public StickyLayout(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-
         mMaximumVelocity = ViewConfiguration.get(context).getScaledMaximumFlingVelocity();
         mMinimumVelocity = ViewConfiguration.get(context).getScaledMinimumFlingVelocity();
         mScroller = new Scroller(context);
@@ -85,36 +82,19 @@ public class StickyLayout extends LinearLayout {
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         acquireVelocityTracker(ev);
-        int action = ev.getAction();
         float y = ev.getY();
-        switch (action) {
-            case MotionEvent.ACTION_DOWN:
-                //DOWN 事件停止 scroller
-                // TODO: 2019-07-15 1. 滑动没有结束 && 头部没有隐藏 && 列表滑动到了头部
-                // TODO: 2019-07-15 1. 滑动没有结束 && 头部没有隐藏 && 向上滑
-                if (!mScroller.isFinished() && !isSticky() && isRecyclerViewTop(getRecyclerView()) || !mScroller.isFinished() && !isSticky() && mDirection == DIRECTION.UP) {
-                    mScroller.forceFinished(true);
-                    ev.setAction(MotionEvent.ACTION_CANCEL);
-                }
-                if (!mReDirect) {
-                    mLastY = y;
-                }
-                break;
+        switch (ev.getAction()) {
             case MotionEvent.ACTION_MOVE:
                 float dy = mLastY - y;
-                //当列表乡下滑动到顶部,发送 ACTION_CANCEL 让 StickyLayout 获取滑动事件
-                //有两种情况,一种是头部处于黏性状态,一种是头部处于非粘性状态
-                // TODO: 2019-07-15 1. 列表下滑 && 内嵌滚动控件是否受用户手势的操控 && 列表滑动到了头部
-                if (dy < 0 && Math.abs(dy) > mTouchSlop && mIsControlled && isRecyclerViewTop(getRecyclerView())) {
+                //滑动有效 && 向下滑 && 内嵌滚动控件滑到了顶端 && 内嵌滚动控件受控制
+                if (slideValidity(dy) && dy < 0 && isRecyclerViewTop(getRecyclerView()) && mIsControlled) {
                     mLastY = y;
                     mIsControlled = false;
-                    mReDirect = true;
                     ev.setAction(MotionEvent.ACTION_CANCEL);
-                } else {
-                    mReDirect = false;
                 }
                 break;
             case MotionEvent.ACTION_UP:
+                //惯性滑动
                 mVelocityTracker.computeCurrentVelocity(1000, mMaximumVelocity);
                 int velocityY = (int) mVelocityTracker.getYVelocity();
                 mDirection = velocityY < 0 ? DIRECTION.UP : DIRECTION.DOWN;
@@ -129,32 +109,26 @@ public class StickyLayout extends LinearLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
-        int action = ev.getAction();
         float y = ev.getY();
-        switch (action) {
+        switch (ev.getAction()) {
             case MotionEvent.ACTION_DOWN:
+                //正在滑动 && 头部没有隐藏 && (列表滑动到了头部 || 向上滑)   DOWN事件停止scroller
+                if (!mScroller.isFinished() && !mIsSticky && (isRecyclerViewTop(getRecyclerView()) || mDirection == DIRECTION.UP)) {
+                    mScroller.abortAnimation();
+                    return true;
+                }
+                mLastY = y;
                 break;
             case MotionEvent.ACTION_MOVE:
-                //非粘性状态列表没有滑动到顶部,向上滑||非粘性状态列表滑动到顶部||黏性状态向下滑,列表到达顶部
-                //这3种情况都需要拦截滑动事件
+                //非粘性状态列表没有滑动到顶部,向上滑||非粘性状态列表滑动到顶部 这2种情况都需要拦截滑动事件
                 float dy = mLastY - y;
-                // TODO: 2019-07-15 1. 头部没有隐藏 && 列表没有滑动到头部 && 向上滑
-                // TODO: 2019-07-15 1. 头部没有隐藏 && 列表滑动到头部
-                // TODO: 2019-07-15 1. 头部隐藏 && 向下滑 && 列表滑动到头部
-                if (!isSticky() && Math.abs(dy) > mTouchSlop && !isRecyclerViewTop(getRecyclerView()) && dy > 0 || !isSticky() && Math.abs(dy) > mTouchSlop && isRecyclerViewTop(getRecyclerView()) || isSticky() && dy < 0 && isRecyclerViewTop(getRecyclerView())) {
+                if (slideValidity(dy) && !mIsSticky && (!isRecyclerViewTop(getRecyclerView()) && dy > 0
+                        || isRecyclerViewTop(getRecyclerView()))) {
                     mLastY = y;
                     return true;
-                } else if (Math.abs(dy) > mTouchSlop) {
+                } else if (slideValidity(dy)) {
                     mIsControlled = true;
                     mIsDragging = false;
-                }
-                break;
-            case MotionEvent.ACTION_UP:
-                //由于在 onTouch 中转发了一个 ACTION_DOWN ,在这时恰好手指抬起触发 ACTION_UP
-                //就会触发 click 事件,所以这时要拦截 ACTION_UP 事件
-                if (isSticky() && mIsDragging) {
-                    mIsDragging = false;
-                    return true;
                 }
                 break;
         }
@@ -163,35 +137,26 @@ public class StickyLayout extends LinearLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        int action = event.getAction();
         float y = event.getY();
-        switch (action) {
+        switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 mLastY = y;
                 break;
             case MotionEvent.ACTION_MOVE:
                 float dy = mLastY - y;
-                mIsControlled = false;
-                if (Math.abs(dy) > mTouchSlop && !mIsDragging) {
+                if (slideValidity(dy) && !mIsDragging) {
                     mIsDragging = true;
                 }
                 if (mIsDragging) {
                     scrollBy(0, (int) (dy + 0.5));
                     //当滑动到黏性状态后转发事件模拟再次点击事件
-                    if (isSticky()) {
+                    if (mIsSticky) {
                         event.setAction(MotionEvent.ACTION_DOWN);
                         dispatchTouchEvent(event);
                         event.setAction(MotionEvent.ACTION_CANCEL);
                     }
                     mLastY = y;
                 }
-                break;
-            case MotionEvent.ACTION_CANCEL:
-                if (!mScroller.isFinished()) {
-                    mScroller.abortAnimation();
-                }
-                recycleVelocityTracker();
-                mIsDragging = false;
                 break;
             case MotionEvent.ACTION_UP:
                 mIsDragging = false;
@@ -212,12 +177,11 @@ public class StickyLayout extends LinearLayout {
         if (mScroller.computeScrollOffset()) {
             int currY = mScroller.getCurrY();
             if (mDirection == DIRECTION.UP) {
-                if (isSticky()) {
-                    mIsControlled = true;
+                if (mIsSticky) {
                     int distance = mScroller.getFinalY() - currY;
                     int duration = mScroller.getDuration() - mScroller.timePassed();
                     getRecyclerView().fling(0, getScrollerVelocity(distance, duration));
-                    mScroller.forceFinished(true);
+                    mScroller.abortAnimation();
                 } else {
                     scrollTo(0, currY);
                 }
@@ -227,7 +191,7 @@ public class StickyLayout extends LinearLayout {
                     int toY = getScrollY() + delta;
                     scrollTo(0, toY);
                     if (getScrollY() == 0 && !mScroller.isFinished()) {
-                        mScroller.forceFinished(true);
+                        mScroller.abortAnimation();
                     }
                 }
                 invalidate();
@@ -246,10 +210,6 @@ public class StickyLayout extends LinearLayout {
         }
         mIsSticky = y == mHeaderHeight;
         super.scrollTo(x, y);
-    }
-
-    public boolean isSticky() {
-        return mIsSticky;
     }
 
     private boolean isRecyclerViewTop(RecyclerView recyclerView) {
@@ -295,4 +255,9 @@ public class StickyLayout extends LinearLayout {
         }
         mVelocityTracker.addMovement(event);
     }
+
+    private boolean slideValidity(float dy) {
+        return Math.abs(dy) > mTouchSlop;
+    }
+
 }
