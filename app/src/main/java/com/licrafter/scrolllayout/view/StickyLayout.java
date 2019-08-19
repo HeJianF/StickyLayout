@@ -218,9 +218,7 @@ public class StickyLayout extends LinearLayout {
             if (layoutManager instanceof LinearLayoutManager) {
                 int firstVisibleItemPosition = ((LinearLayoutManager) layoutManager).findFirstVisibleItemPosition();
                 View childAt = recyclerView.getChildAt(0);
-                if (childAt == null || (firstVisibleItemPosition == 0 && childAt.getTop() == 0)) {
-                    return true;
-                }
+                return childAt == null || (firstVisibleItemPosition == 0 && childAt.getTop() == 0);
             }
         }
         return false;
@@ -228,8 +226,11 @@ public class StickyLayout extends LinearLayout {
 
     private RecyclerView getRecyclerView() {
         HomeFragment.GoodsPageAdapter adapter = (HomeFragment.GoodsPageAdapter) mContentView.getAdapter();
-        View view = adapter.getFragment(mContentView.getCurrentItem()).getView();
-        return (RecyclerView) view;
+        RecyclerView view = null;
+        if (adapter != null) {
+            view = (RecyclerView) adapter.getFragment(mContentView.getCurrentItem()).getView();
+        }
+        return view;
     }
 
     private int getScrollerVelocity(int distance, int duration) {
